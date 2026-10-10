@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TODOリスト</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --line: #e3e5e8;
+    --accent: #2f6fde;
+    --accent-weak: #e6eefc;
+    --danger: #d64545;
+    --done: #9aa1ab;
+    --star: #e8a317;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a;
+      --card: #1f2226;
+      --text: #e6e8eb;
+      --muted: #9aa1ab;
+      --line: #2e3238;
+      --accent: #5b8ff0;
+      --accent-weak: #22304a;
+      --danger: #f07070;
+      --done: #6b7280;
+      --star: #f0b94a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 32px 16px 64px;
+  }
+  h1 {
+    font-size: 1.6rem;
+    margin: 0 0 4px;
+  }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: .9rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  /* 入力欄 */
+  form.add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  form.add input[type="text"] {
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+  input[type="text"], input[type="date"] {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--text);
+    padding: 8px 14px;
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* 絞り込み */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .filters { display: flex; gap: 4px; }
+  .filters button { padding: 6px 12px; font-size: .9rem; }
+  .filters button[aria-pressed="true"] {
+    background: var(--accent-weak);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .count { color: var(--muted); font-size: .9rem; }
+
+  /* 一覧 */
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  ul.list li:last-child { border-bottom: none; }
+  ul.list li.dragging { opacity: .4; }
+  .handle {
+    cursor: grab;
+    color: var(--muted);
+    user-select: none;
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+  .check { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+  .body { flex: 1; min-width: 0; }
+  .title {
+    word-break: break-word;
+    cursor: text;
+  }
+  li.done .title { color: var(--done); text-decoration: line-through; }
+  .due { font-size: .8rem; color: var(--muted); }
+  .due.overdue { color: var(--danger); font-weight: 600; }
+  .due.today { color: var(--accent); font-weight: 600; }
+  li.done .due { color: var(--done); font-weight: normal; }
+  .title-edit { width: 100%; }
+  .icon {
+    border: none;
+    background: none;
+    padding: 4px 6px;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--muted);
+  }
+  .icon:hover { color: var(--text); }
+  .icon.star.on { color: var(--star); }
+  .icon.del:hover { color: var(--danger); }
+  .empty { padding: 32px 12px; text-align: center; color: var(--muted); }
+
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .hint { color: var(--muted); font-size: .8rem; }
+  button.clear { font-size: .85rem; padding: 6px 12px; }
+  button.clear:disabled { opacity: .4; cursor: default; }
+</style>
+</head>
+<body>
+<main>
+  <h1>TODOリスト</h1>
+  <p class="sub">やることを書いて、終わったらチェック。データはこのブラウザに自動で保存されます。</p>
+
+  <form class="add card" id="addForm">
+    <input type="text" id="newTitle" placeholder="やることを入力（例：牛乳を買う）" aria-label="やること" autocomplete="off">
+    <input type="date" id="newDue" aria-label="期限（なくてもOK）" title="期限（なくてもOK）">
+    <button type="submit" class="primary">追加</button>
+  </form>
+
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="表示の切り替え">
+      <button type="button" data-filter="all" aria-pressed="true">すべて</button>
+      <button type="button" data-filter="active" aria-pressed="false">未完了</button>
+      <button type="button" data-filter="done" aria-pressed="false">完了</button>
+    </div>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="card">
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="empty" hidden></div>
+  </div>
+
+  <div class="footer">
+    <span class="hint">文字をダブルクリックで編集 ／ ⋮⋮ をつかんで並べ替え ／ ★で重要マーク</span>
+    <button type="button" class="clear" id="clearDone">完了したものを削除</button>
+  </div>
+</main>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'todo-app-v1';
+
+  // ---------- 保存と読み込み ----------
+  function load() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+    } catch (e) {
+      // 保存できない環境（プライベートモードなど）でも画面は動かす
+    }
+  }
+
+  let todos = load();
+  let filter = 'all';
+
+  const $ = (id) => document.getElementById(id);
+  const listEl = $('list');
+  const emptyEl = $('empty');
+  const countEl = $('count');
+  const clearBtn = $('clearDone');
+
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- 期限の表示 ----------
+  function todayStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function dueInfo(due) {
+    if (!due) return null;
+    const t = todayStr();
+    const [, m, d] = due.split('-');
+    const label = `${Number(m)}/${Number(d)}`;
+    if (due < t) return { text: `期限 ${label}（過ぎています）`, cls: 'overdue' };
+    if (due === t) return { text: `期限 ${label}（今日）`, cls: 'today' };
+    return { text: `期限 ${label}`, cls: '' };
+  }
+
+  // ---------- 画面の描画 ----------
+  function visibleTodos() {
+    if (filter === 'active') return todos.filter((t) => !t.done);
+    if (filter === 'done') return todos.filter((t) => t.done);
+    return todos;
+  }
+
+  function render() {
+    listEl.textContent = '';
+    const items = visibleTodos();
+
+    for (const todo of items) {
+      listEl.appendChild(renderItem(todo));
+    }
+
+    if (items.length === 0) {
+      emptyEl.hidden = false;
+      emptyEl.textContent =
+        todos.length === 0 ? 'まだ何もありません。上の欄から追加してみましょう。'
+        : filter === 'active' ? '未完了のものはありません。おつかれさまでした！'
+        : filter === 'done' ? '完了したものはまだありません。'
+        : '';
+    } else {
+      emptyEl.hidden = true;
+    }
+
+    const remaining = todos.filter((t) => !t.done).length;
+    const doneCount = todos.length - remaining;
+    countEl.textContent = `残り ${remaining} 件 ／ 全 ${todos.length} 件`;
+    clearBtn.disabled = doneCount === 0;
+  }
+
+  function renderItem(todo) {
+    const li = document.createElement('li');
+    li.dataset.id = todo.id;
+    if (todo.done) li.classList.add('done');
+
+    // 並べ替え用のつまみ（「すべて」表示のときだけ）
+    const handle = document.createElement('span');
+    handle.className = 'handle';
+    handle.textContent = '⋮⋮';
+    handle.title = 'ドラッグで並べ替え';
+    if (filter === 'all') {
+      li.draggable = true;
+    } else {
+      handle.style.visibility = 'hidden';
+    }
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'check';
+    check.checked = todo.done;
+    check.setAttribute('aria-label', '完了にする');
+    check.addEventListener('change', () => {
+      todo.done = check.checked;
+      save();
+      render();
+    });
+
+    const body = document.createElement('div');
+    body.className = 'body';
+    const title = document.createElement('div');
+    title.className = 'title';
+    title.textContent = todo.title;
+    title.title = 'ダブルクリックで編集';
+    title.addEventListener('dblclick', () => startEdit(todo, body, title));
+    body.appendChild(title);
+
+    const info = dueInfo(todo.due);
+    if (info) {
+      const due = document.createElement('div');
+      due.className = 'due ' + info.cls;
+      due.textContent = info.text;
+      body.appendChild(due);
+    }
+
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'icon star' + (todo.star ? ' on' : '');
+    star.textContent = todo.star ? '★' : '☆';
+    star.title = todo.star ? '重要マークを外す' : '重要マークをつける';
+    star.setAttribute('aria-pressed', String(!!todo.star));
+    star.addEventListener('click', () => {
+      todo.star = !todo.star;
+      save();
+      render();
+    });
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'icon del';
+    del.textContent = '✕';
+    del.title = '削除';
+    del.setAttribute('aria-label', '削除');
+    del.addEventListener('click', () => {
+      todos = todos.filter((t) => t.id !== todo.id);
+      save();
+      render();
+    });
+
+    li.append(handle, check, body, star, del);
+    return li;
+  }
+
+  // ---------- 編集 ----------
+  function startEdit(todo, body, titleEl) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'title-edit';
+    input.value = todo.title;
+    body.replaceChild(input, titleEl);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = (commit) => {
+      if (finished) return;
+      finished = true;
+      const value = input.value.trim();
+      if (commit && value) {
+        todo.title = value;
+        save();
+      }
+      render();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+
+  // ---------- 追加 ----------
+  $('addForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const titleInput = $('newTitle');
+    const dueInput = $('newDue');
+    const title = titleInput.value.trim();
+    if (!title) {
+      titleInput.focus();
+      return;
+    }
+    todos.unshift({ id: newId(), title, done: false, star: false, due: dueInput.value || '' });
+    titleInput.value = '';
+    dueInput.value = '';
+    save();
+    render();
+    titleInput.focus();
+  });
+
+  // ---------- 絞り込み ----------
+  document.querySelectorAll('.filters button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filter = btn.dataset.filter;
+      document.querySelectorAll('.filters button').forEach((b) =>
+        b.setAttribute('aria-pressed', String(b === btn)));
+      render();
+    });
+  });
+
+  // ---------- 完了したものを削除 ----------
+  clearBtn.addEventListener('click', () => {
+    todos = todos.filter((t) => !t.done);
+    save();
+    render();
+  });
+
+  // ---------- ドラッグで並べ替え ----------
+  let dragId = null;
+  listEl.addEventListener('dragstart', (e) => {
+    const li = e.target.closest('li');
+    if (!li) return;
+    dragId = li.dataset.id;
+    li.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+  listEl.addEventListener('dragover', (e) => {
+    if (!dragId) return;
+    e.preventDefault();
+    const dragging = listEl.querySelector('li.dragging');
+    const over = e.target.closest('li');
+    if (!dragging || !over || over === dragging) return;
+    const rect = over.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    listEl.insertBefore(dragging, after ? over.nextSibling : over);
+  });
+  listEl.addEventListener('dragend', () => {
+    if (!dragId) return;
+    const order = [...listEl.children].map((li) => li.dataset.id);
+    const byId = new Map(todos.map((t) => [t.id, t]));
+    todos = order.map((id) => byId.get(id)).filter(Boolean);
+    dragId = null;
+    save();
+    render();
+  });
+
+  // 日付が変わったら「今日」「過ぎています」の表示を更新
+  // （編集中の入力を消さないよう、日付が変わったときだけ描き直す）
+  let lastDay = todayStr();
+  setInterval(() => {
+    if (todayStr() !== lastDay) {
+      lastDay = todayStr();
+      render();
+    }
+  }, 60 * 1000);
+
+  render();
+  $('newTitle').focus();
+})();
+</script>
+</body>
+</html>
